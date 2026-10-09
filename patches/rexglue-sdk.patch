@@ -873,6 +873,28 @@ index c10694c..ffdaddc 100644
      return false;
    }
    if (!file_system_->RegisterDevice(std::move(device))) {
+diff --git a/src/system/xam/content_manager.cpp b/src/system/xam/content_manager.cpp
+index bd6c797..0177f01 100644
+--- a/src/system/xam/content_manager.cpp
++++ b/src/system/xam/content_manager.cpp
+@@ -631,11 +631,14 @@ X_RESULT ContentManager::InstallContent(const std::filesystem::path& package_pat
+     }
+   }
+ 
+-  // Compute license mask from STFS header licenses
++  // Compute license mask from STFS header licenses. A licensee of all ones is the "any console,
++  // any profile" license of free content (SvR 2010's Roster Update 1: bits 1, flags 0); it grants
++  // its bits whatever the flags.
+   uint32_t license_mask = 0;
+   for (size_t i = 0; i < 0x10; i++) {
+-    if (device->header().header.licenses[i].license_flags) {
+-      license_mask |= device->header().header.licenses[i].license_bits;
++    const auto& license = device->header().header.licenses[i];
++    if (license.license_flags || uint64_t(license.licensee_id) == ~uint64_t(0)) {
++      license_mask |= license.license_bits;
+     }
+   }
+ 
 diff --git a/src/ui/d3d12/d3d12_descriptor_heap_pool.cpp b/src/ui/d3d12/d3d12_descriptor_heap_pool.cpp
 index 650f1d1..18b6479 100644
 --- a/src/ui/d3d12/d3d12_descriptor_heap_pool.cpp

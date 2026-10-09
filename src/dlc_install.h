@@ -16,6 +16,7 @@
 #include <rex/system/xcontent.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -46,6 +47,41 @@ inline bool IsDlcPackageFor(const std::filesystem::path& file, uint32_t title_id
          be32(0x360) == title_id;
 }
 
+// License bits a package grants (STFS license table at 0x22C: 16 entries of licensee id u64, bits
+// u32, flags u32), counted the way the runtime's install does: flagged entries, and the all-ones
+// "any console, any profile" licensee of free content.
+inline uint32_t PackageLicenseBits(const std::filesystem::path& file) {
+  std::ifstream in(file, std::ios::binary);
+  unsigned char t[0x100] = {};
+  if (!in.seekg(0x22C) || !in.read(reinterpret_cast<char*>(t), sizeof(t)))
+    return 0;
+  auto be32 = [&](size_t o) {
+    return uint32_t(t[o]) << 24 | uint32_t(t[o + 1]) << 16 | uint32_t(t[o + 2]) << 8 | t[o + 3];
+  };
+  uint32_t bits = 0;
+  for (size_t i = 0; i < 16; ++i) {
+    const size_t e = i * 16;
+    const bool any_profile = be32(e) == 0xFFFFFFFFu && be32(e + 4) == 0xFFFFFFFFu;
+    if (be32(e + 12) || any_profile)
+      bits |= be32(e + 8);
+  }
+  return bits;
+}
+
+// Installs made before free content's license was counted stored no license, so the game took
+// the package for unpurchased: append it to the stored header (aggregate data, then a u32 mask).
+inline void RepairStoredLicense(const std::filesystem::path& package, const std::filesystem::path& header) {
+  std::error_code ec;
+  const uint32_t bits = PackageLicenseBits(package);
+  if (!bits || !std::filesystem::exists(header, ec) ||
+      std::filesystem::file_size(header, ec) != sizeof(rex::system::xam::XCONTENT_AGGREGATE_DATA))
+    return;
+  std::ofstream out(header, std::ios::binary | std::ios::app);
+  out.write(reinterpret_cast<const char*>(&bits), sizeof(bits));
+  if (out)
+    REXLOG_INFO("[dlc] added the license to {}", header.filename().string());
+}
+
 inline void DlcMessage(const std::string& text) {
   REXLOG_ERROR("[dlc] {}", text);
 #if defined(_WIN32)
@@ -74,8 +110,13 @@ inline void InstallDlcPackages(rex::system::KernelState* kernel, const std::file
     if (!it->is_regular_file(ec) || !IsDlcPackageFor(it->path(), title_id))
       continue;
     const std::string name = it->path().filename().string();
-    if (installed.count(name))
+    if (installed.count(name)) {
+      char title[9];
+      std::snprintf(title, sizeof(title), "%08X", title_id);
+      RepairStoredLicense(it->path(), user_data_root / "0000000000000000" / title / "Headers" /
+                                          "00000002" / (name + ".header"));
       continue;
+    }
 
     // <userdata>\0000000000000000\<title>\00000002\<package>\ plus the deepest file inside the
     // package (about 70 characters for SvR 2009's packs) must stay under MAX_PATH.
