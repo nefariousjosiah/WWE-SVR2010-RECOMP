@@ -1,0 +1,48 @@
+# Codegen fixes for SvR 2010's default.xex (included from svr2010_manifest.toml [entrypoint]).
+# Starts empty: every address in 2009's file (config/reference_2009/) is 2009-only. Hooks are added
+# as the 2010 addresses are found (60 fps, frame swap, loading).
+
+# D3D Swap (sub_826DA538) just loaded the present interval (device+13804) into r11; logged.
+[[midasm_hook]]
+name = "SvrPresentIntervalHook"
+address = 0x826DA5E8
+registers = ["r11"]
+after_instruction = true
+
+# Frame-rate mode (src/fps_hooks.cpp): with --svr_60fps the game stays in its 60 fps mode.
+# SetFrameRate(fps) (sub_821E37D0, struct 0x82B943C8): r3 = requested rate; 30/25 become 60/50.
+[[midasm_hook]]
+name = "SvrSetFrameRateHook"
+address = 0x821E37D0
+registers = ["r3"]
+
+# "Drop to 30 fps mode": skipped (returns immediately) when the hook returns true.
+[[midasm_hook]]
+name = "SvrSkip30ModeHook"
+address = 0x821E3970
+registers = []
+return_on_true = true
+
+# The game's swap function (sub_826DA968) about to call VdSwap: once per presented frame.
+[[midasm_hook]]
+name = "SvrFrameSwapHook"
+address = 0x826DAC0C
+registers = []
+
+# Loading: the loader's per-frame time slice (src/loading_hooks.cpp). At the budget compare in
+# sub_821DB668, f13 = budget in ms (same design as 2009); raised to svr_load_slice_ms.
+[[midasm_hook]]
+name = "SvrLoaderBudgetHook"
+address = 0x821DB6A8
+registers = ["f13"]
+
+[functions]
+# Branch targets analysis left outside any function (codegen UnresolvedCall).
+0x828C6080 = {}
+0x822B6858 = {}
+0x829EFC88 = {}
+# Reached by computed address (no data word or lis/addi the sweep can see): found by a boot test.
+0x82A8CE38 = {}
+0x82A8CE60 = {}
+0x82A8CE88 = {}
+0x82A8CEA0 = {}

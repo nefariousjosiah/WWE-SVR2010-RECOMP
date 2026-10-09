@@ -1,0 +1,61 @@
+# svr2010 - ReXGlue Recompiled Project
+#
+# SDK boilerplate lives in generated/rexglue.cmake.
+
+cmake_minimum_required(VERSION 3.25)
+# The release version (shown in the in-game settings menu; package_release.ps1 uses it too).
+project(svr2010 VERSION 0.1 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(generated/rexglue.cmake)
+
+# Sources
+set(SVR2010_SOURCES
+    src/main.cpp
+    src/fps_hooks.cpp
+    src/game_locator.cpp
+    src/input_script.cpp
+    src/timer_resolution.cpp
+    src/loading_hooks.cpp
+)
+
+if(WIN32)
+    add_executable(svr2010 WIN32 ${SVR2010_SOURCES})
+else()
+    add_executable(svr2010 ${SVR2010_SOURCES})
+endif()
+
+rexglue_setup_target(svr2010 GPU_PLUGINS xenos)
+target_compile_definitions(svr2010 PRIVATE SVR_VERSION="${PROJECT_VERSION}")
+if(WIN32)
+    # Game file picker (src/game_locator.cpp).
+    target_link_libraries(svr2010 PRIVATE comdlg32)
+    # 1 ms timer resolution (src/timer_resolution.cpp).
+    target_link_libraries(svr2010 PRIVATE winmm)
+endif()
+
+# Developer call census of the D3D library functions, for native
+# renderer reverse engineering. Off by default; never ship a build with it on.
+option(SVR_D3D_CENSUS "Count calls to the game's D3D library functions" OFF)
+# Native renderer (cmake/native_renderer.cmake). Its hooks override the
+# same D3D functions the census wraps, so the two are exclusive.
+option(SVR_NATIVE_RENDERER "Draw through plume instead of emulating the Xenos GPU" OFF)
+if(SVR_NATIVE_RENDERER AND SVR_D3D_CENSUS)
+    message(FATAL_ERROR "SVR_NATIVE_RENDERER and SVR_D3D_CENSUS hook the same functions; pick one")
+endif()
+if(SVR_D3D_CENSUS)
+    # SvR 2010: shader dump only. src/dev/d3d_census.cpp lists SvR 2009's D3D addresses (2010's were
+    # mapped by matching, tools/native/match_functions.py); regenerate it before using the census.
+    target_sources(svr2010 PRIVATE src/dev/shader_dump.cpp)
+endif()
+if(SVR_NATIVE_RENDERER)
+    include(cmake/native_renderer.cmake)
+    svr_add_native_renderer(svr2010)
+endif()
+
+# Overlay fonts (Press Start 2P for the FPS counter, SIL OFL 1.1) next to the executable.
+add_custom_command(TARGET svr2010 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/res/fonts" "$<TARGET_FILE_DIR:svr2010>/fonts")
