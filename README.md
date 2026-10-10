@@ -41,6 +41,11 @@ loading.
   the game's shaders recompiled ahead of time. No GPU emulation.
 - **60 fps** in menus and matches, using the game's own 60 fps mode so game speed stays right
   (the original 30 fps is one setting away).
+- **Runs on lower-end PCs too.** The game draws its crowd in thousands of small pieces, and on
+  slower processors that used to cost frames in entrances and crowd shots. The renderer now does
+  far less work per frame: the graphics driver's work runs on its own thread, and textures,
+  geometry and shader settings are only sent again when they change. A GTX 1060 with an i7-8700
+  that dropped to the 40s in some entrances now holds 60 fps.
 - **Up to 4K.** Internal resolution follows your screen: 1440p on 1080p and 1440p monitors, 4K on
   4K monitors, 720p on the Steam Deck. Or pick 720p / 1440p / 4K yourself. 16x anisotropic
   filtering.
@@ -168,6 +173,11 @@ Notes for the Deck:
   layout.
 - **Artwork:** Steam's library artwork for the shortcut can be set from its properties.
 
+## Known issues
+
+- **Road to WrestleMania:** on NVIDIA graphics cards, the locker room door and the magazine on
+  the chair can look see-through (speckled). It's cosmetic and is being looked into.
+
 ## Troubleshooting
 
 | What happens | What to do |
@@ -175,7 +185,7 @@ Notes for the Deck:
 | A window asks for a disc image | There's no `.iso` next to `svr2010.exe`: pick your disc image (it's remembered), or copy it into the game's folder. |
 | The game closes right after starting | Check that your disc image is the USA / Europe release of SvR 2010 and complete. |
 | Black screen, or the game closes | Update your graphics driver (the renderer needs Vulkan), then try again. If it keeps happening, open an issue with `game.log` from the game's folder. |
-| It runs slowly | **F1** > *Resolution* > **720p** or **1440p** (applies on the next start): lower resolutions need less from the graphics card. |
+| It runs slowly | Make sure you have the latest version (v0.4 made a big difference on older processors). On a weak graphics card, **F1** > *Resolution* > **720p** or **1440p** (applies on the next start) needs less from it. If it still drops, open an issue with `game.log`, your processor and graphics card. |
 | Windows blocks it | *More info* > *Run anyway* (the program isn't code-signed). |
 
 ## How it works

@@ -13,6 +13,7 @@
 #include <rex/input/input_system.h>
 #include <rex/ui/keybinds.h>
 
+#include <atomic>
 #include <filesystem>
 #include <memory>
 
@@ -72,7 +73,9 @@ class Svr2010App : public rex::ReXApp {
 #if defined(SVR_NATIVE_RENDERER)
   // The plume device draws the ImGui overlays (FPS counter etc.) at present time.
   std::unique_ptr<rex::ui::ImmediateDrawer> OnCreateImmediateDrawer() override {
-    return std::make_unique<bd::gpu::ImGuiOverlayDrawer>();
+    auto drawer = std::make_unique<bd::gpu::ImGuiOverlayDrawer>();
+    overlay_drawer_ = drawer.get();
+    return drawer;
   }
 
   void OnPreLaunchModule() override {
@@ -81,17 +84,34 @@ class Svr2010App : public rex::ReXApp {
       app_context().QuitFromUIThread();
       return;
     }
-    // Present runs on the guest thread and ImGui on the UI thread, so the overlay is drawn
-    // synchronously on the UI thread into the frame being presented.
+    // Present runs on the guest thread and ImGui on the UI thread. Waiting for the UI thread to
+    // draw the overlay (FPS counter, settings) cost the game thread a few ms every frame, so
+    // the UI thread records the overlay in the background and Present replays the latest
+    // recording (ImGuiOverlayDrawer::Capture). Only the first frame, a resize or a new font
+    // texture still draws directly on the UI thread.
     bd::gpu::Video::SetOverlayDrawHook([this](plume::RenderCommandList* cmd,
                                               plume::RenderFramebuffer* fb, uint32_t w,
                                               uint32_t h) {
-      if (!imgui_drawer() || !imgui_drawer()->HasDialogs())
+      auto* drawer = overlay_drawer_;
+      if (!imgui_drawer() || !imgui_drawer()->HasDialogs()) {
+        if (drawer)
+          drawer->ClearCapture();
         return;
-      app_context().CallInUIThreadSynchronous([this, cmd, fb, w, h] {
-        bd::gpu::ReblueUIDrawContext ctx(w, h, cmd, fb);
-        imgui_drawer()->Draw(ctx);
-      });
+      }
+      if (!drawer || drawer->NeedsDirectDraw() || !drawer->ReplayLatest(cmd, fb, w, h)) {
+        app_context().CallInUIThreadSynchronous([this, cmd, fb, w, h] {
+          bd::gpu::ReblueUIDrawContext ctx(w, h, cmd, fb);
+          imgui_drawer()->Draw(ctx);
+        });
+      }
+      if (drawer && !overlay_capture_pending_.exchange(true)) {
+        app_context().CallInUIThread([this, w, h] {
+          if (imgui_drawer() && overlay_drawer_)
+            overlay_drawer_->Capture(
+                w, h, [this](rex::ui::UIDrawContext& ctx) { imgui_drawer()->Draw(ctx); });
+          overlay_capture_pending_.store(false);
+        });
+      }
     });
   }
 
@@ -117,6 +137,9 @@ class Svr2010App : public rex::ReXApp {
     }
   }
   void OnShutdown() override {
+#if defined(SVR_NATIVE_RENDERER)
+    overlay_drawer_ = nullptr;
+#endif
     rex::ui::UnregisterBind("bind_fps_counter");
     rex::ui::UnregisterBind("bind_svr_settings");
     settings_menu_.reset();
@@ -220,4 +243,8 @@ class Svr2010App : public rex::ReXApp {
   rex::ui::ImGuiDrawer* imgui_drawer_ = nullptr;
   std::unique_ptr<FpsCounterDialog> fps_counter_;
   std::unique_ptr<SettingsMenuDialog> settings_menu_;
+#if defined(SVR_NATIVE_RENDERER)
+  bd::gpu::ImGuiOverlayDrawer* overlay_drawer_ = nullptr;  // owned by the ImGui drawer
+  std::atomic<bool> overlay_capture_pending_{false};
+#endif
 };

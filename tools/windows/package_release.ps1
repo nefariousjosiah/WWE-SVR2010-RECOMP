@@ -32,6 +32,9 @@ content is in the game. No DLC is included with this download.
 "@ | Set-Content "$Out\dlc\PUT YOUR DLC HERE.txt" -Encoding ascii
 foreach ($f in "$Id.exe", "rexruntime.dll", "rexgpu-xenos.dll") { Copy-Item "$Build\$f" $Out }
 Copy-Item "$Build\fonts" $Out -Recurse
+# Graphics pipelines the game uses (render states and shader hashes, no game data), recorded by
+# playing the build: precompiled in the background at startup instead of hitching mid-match.
+if (Test-Path "$Build\pipelines.bin") { Copy-Item "$Build\pipelines.bin" $Out }
 # Visual C++ runtime, app-local (Proton and PCs without the redistributable).
 foreach ($f in "msvcp140.dll", "msvcp140_atomic_wait.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
   Copy-Item "$env:WINDIR\System32\$f" $Out
