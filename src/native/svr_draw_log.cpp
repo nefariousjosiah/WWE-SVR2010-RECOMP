@@ -2,12 +2,14 @@
 //
 //   SVR_DRAW_LOG=7000   (frame index, counted in presents; logs/game.log gets a [drawlog] line per
 //                        draw, clear and resolve of that frame)
+//   F9 in game          logs the next frame the same way (svr_drawlog_key)
 //
 // Per draw: the game's render target / depth surface and the host target they map to, viewport,
 // scissor, shaders, and every bound texture (the game's D3D texture and its host counterpart).
 
 #include "svr_draw_log.h"
 
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -19,6 +21,7 @@
 #include "gpu/d3d.h"
 #include "gpu/device.h"
 #include "gpu/resources.h"
+#include "gpu/shaders/shader_constants.h"
 #include "gpu/vertex_declaration.h"
 #include "svr_resources.h"
 
@@ -48,9 +51,18 @@ u64 ShaderHash(const GuestShader *s) {
 
 }  // namespace
 
+std::atomic<u64> g_key_frame{0};  // the frame F9 asked for
+
 bool SvrDrawLogActive() {
+  const u64 frame = SvrFrameIndex();
   const u64 target = TargetFrame();
-  return target && SvrFrameIndex() == target;
+  return (target && frame == target) || frame == g_key_frame.load(std::memory_order_relaxed);
+}
+
+void SvrDrawLogNextFrame() {
+  const u64 next = SvrFrameIndex() + 1;
+  g_key_frame.store(next, std::memory_order_relaxed);
+  BD_INFO("[drawlog] logging frame {} (F9)", next);
 }
 
 void SvrDrawLogDraw(u32 device_guest, const char *name, u32 primitive, bool indexed, u32 count,
@@ -68,6 +80,14 @@ void SvrDrawLogDraw(u32 device_guest, const char *name, u32 primitive, bool inde
     if (!va && !s.textures[slot])
       continue;
     textures += fmt::format(" t{}=0x{:08X}[{}]", slot, va, Host(s.textures[slot]));
+    // The fetch constant (D3DTexture+0x1C, 6 dwords): mip filter, min/max level, LOD bias.
+    if (va && slot < 8) {
+      if (const auto *t = bd::mem::try_at<const D3DTexture>(va))
+        textures += fmt::format("{{fc {:08X} {:08X} {:08X} {:08X} {:08X} {:08X}}}",
+                                u32(t->Format.dword[0]), u32(t->Format.dword[1]),
+                                u32(t->Format.dword[2]), u32(t->Format.dword[3]),
+                                u32(t->Format.dword[4]), u32(t->Format.dword[5]));
+    }
   }
   // Register shadows: the 0x2100 block at +0x28CC, the 0x2200 block at +0x2934 (one dword each).
   const auto reg = [&](u32 r) -> u32 {
@@ -91,6 +111,13 @@ void SvrDrawLogDraw(u32 device_guest, const char *name, u32 primitive, bool inde
     }
     BD_INFO("[drawlog]   decl{}", elements);
   }
+  BD_INFO("[drawlog]   blendctl 0x{:08X} colorctl 0x{:08X} alpharef {:.4g} | host blend {} {}/{} "
+          "alphatest {} threshold {:.4g} zfunc {} zwrite {}",
+          reg(0x2201), reg(0x2202), regf(0x210E), s.pipelineState.alphaBlendEnable ? "on" : "off",
+          u32(s.pipelineState.srcBlend), u32(s.pipelineState.destBlend),
+          (s.pipelineState.specConstants & kSpecConstantAlphaTest) ? "on" : "off",
+          Video::AlphaThreshold(), u32(s.pipelineState.zFunc),
+          s.pipelineState.zWriteEnable ? "on" : "off");
   BD_INFO("[drawlog]   vte 0x{:X} clip 0x{:X} mode 0x{:X} depthctl 0x{:08X} colormask 0x{:X} "
           "ps-c13 {:.4g},{:.4g},{:.4g},{:.4g} ps-c14 {:.4g},{:.4g},{:.4g},{:.4g}",
           reg(0x2206), reg(0x2204), reg(0x2205), reg(0x2200), reg(0x2104),

@@ -210,8 +210,9 @@ Notes for the Deck:
 
 ## Known issues
 
-- **Road to WrestleMania:** on NVIDIA graphics cards, the locker room door and the magazine on
-  the chair can look see-through (speckled). It's cosmetic and is being looked into.
+None open right now. If you run into something, please
+[open an issue](https://github.com/nefariousjosiah/WWE-SVR2010-RECOMP/issues) with `game.log` from
+the game's folder.
 
 ## Troubleshooting
 

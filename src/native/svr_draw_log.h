@@ -6,6 +6,8 @@
 namespace bd::gpu {
 
 bool SvrDrawLogActive();
+// Logs every draw of the next presented frame (the F9 dev key).
+void SvrDrawLogNextFrame();
 void SvrDrawLogDraw(u32 device_guest, const char *name, u32 primitive, bool indexed, u32 count,
                     u32 start, i32 base);
 void SvrDrawLogResolve(u32 device_guest, u32 flags, u32 source_rect_va, u32 dest_va,

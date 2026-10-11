@@ -48,6 +48,7 @@ inline thread_local bool t_overlay_reads_pad = false;
 #if defined(SVR_NATIVE_RENDERER)
 namespace bd::gpu {
 uint32_t SvrAutoRenderScale();  // src/native/svr_resources.h
+void SvrDrawLogNextFrame();     // src/native/svr_draw_log.h
 }
 #endif
 
@@ -194,6 +195,7 @@ class Svr2010App : public rex::ReXApp {
 #endif
     rex::ui::UnregisterBind("bind_fps_counter");
     rex::ui::UnregisterBind("bind_svr_settings");
+    rex::ui::UnregisterBind("bind_svr_drawlog");
     settings_menu_.reset();
     updater_.reset();  // stops a download in progress
     fps_counter_.reset();
@@ -232,6 +234,11 @@ class Svr2010App : public rex::ReXApp {
       else if (imgui_drawer_)
         fps_counter_ = std::make_unique<FpsCounterDialog>(imgui_drawer_);
     });
+#if defined(SVR_NATIVE_RENDERER)
+    // Developer aid: F9 writes every draw of the next frame to game.log ([drawlog] lines).
+    rex::ui::RegisterBind("bind_svr_drawlog", "F9", "Log the next frame's draws",
+                          [] { bd::gpu::SvrDrawLogNextFrame(); });
+#endif
     // In-game settings menu: F1, or Back + Start on a controller (settings_menu.h).
     SettingsMenuDialog::Hooks hooks;
     hooks.is_fullscreen = [this] { return window() && window()->IsFullscreen(); };
