@@ -57,9 +57,16 @@ std::filesystem::path StorePath() {
   return rex::filesystem::GetExecutableFolder() / "pipelines.bin";
 }
 
-// The stored form: the pipeline with content hashes in its shader and declaration slots.
+// The stored form: the pipeline with content hashes in its shader and declaration slots, and the
+// device-chosen formats in their neutral form (SanitizePipelineState maps them back on load):
+// depth-stencil D32S8 (D3D12 picks D24S8 on NVIDIA / Intel) and the scene's RGBA16F, so a store
+// recorded on one PC or graphics API serves every other.
 PipelineState Stored(const PipelineState &state, u64 vs, u64 ps, u64 decl) {
   PipelineState s = state;
+  if (plume::RenderFormatIsStencil(s.depthStencilFormat))
+    s.depthStencilFormat = plume::RenderFormat::D32_FLOAT_S8_UINT;
+  if (s.renderTargetFormat == plume::RenderFormat::R11G11B10_FLOAT)
+    s.renderTargetFormat = plume::RenderFormat::R16G16B16A16_FLOAT;
   s.vertexShader = reinterpret_cast<GuestShader *>(vs);
   s.pixelShader = reinterpret_cast<GuestShader *>(ps);
   s.vertexDeclaration = reinterpret_cast<GuestVertexDeclaration *>(decl);

@@ -21,6 +21,7 @@
 #include "dlc_install.h"
 #include "game_locator.h"
 #include "settings_menu.h"
+#include "graphics_api.h"
 #if defined(SVR_NATIVE_RENDERER)
 #include "gpu/device.h"
 #include "gpu/imgui_overlay_drawer.h"
@@ -32,6 +33,7 @@
 REXCVAR_DECLARE(std::string, gpu_backend);
 REXCVAR_DECLARE(bool, svr_fps_counter);
 REXCVAR_DECLARE(bool, svr_check_updates);
+REXCVAR_DECLARE(bool, svr_high_priority);
 
 #ifndef SVR_VERSION
 #define SVR_VERSION "dev"  // set by CMakeLists.txt (project VERSION)
@@ -42,6 +44,21 @@ inline constexpr const char* kWindowTitle = "WWE SmackDown vs. Raw 2010";
 // Set while the settings menu reads the pad through the game's input system (UI thread only), so
 // the input gate lets that read through.
 inline thread_local bool t_overlay_reads_pad = false;
+
+#if defined(SVR_NATIVE_RENDERER)
+namespace bd::gpu {
+uint32_t SvrAutoRenderScale();  // src/native/svr_resources.h
+}
+#endif
+
+// Above-normal process priority (settings menu > CPU priority): the game's threads go first when
+// other programs want the processor, which keeps entrances smooth on busy or weak PCs.
+inline void SvrSetHighPriority(bool on) {
+#if defined(_WIN32)
+  SetPriorityClass(GetCurrentProcess(), on ? ABOVE_NORMAL_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS);
+#endif
+  REXLOG_INFO("CPU priority: {}", on ? "high (above normal)" : "normal");
+}
 
 class Svr2010App : public rex::ReXApp {
  public:
@@ -89,6 +106,13 @@ class Svr2010App : public rex::ReXApp {
   void OnPreLaunchModule() override {
     if (!bd::gpu::Video::CreateHostDevice(window())) {
       REXLOG_ERROR("Native renderer: host device creation failed");
+#if defined(_WIN32)
+      // No working device on this API (an old graphics card or driver): try the other program.
+      DWORD unused = 0;
+      if (svr::StartOtherGraphicsApi(false, unused))
+        REXLOG_INFO("Graphics API: started the {} program instead",
+                    svr::kThisIsD3D12 ? "Vulkan" : "Direct3D 12");
+#endif
       app_context().QuitFromUIThread();
       return;
     }
@@ -130,7 +154,12 @@ class Svr2010App : public rex::ReXApp {
     // Replaces the SDK's "svr2010 [rexglue-<build>]" title set during window creation.
     if (window())
       window()->SetTitle(kWindowTitle);
+#if defined(_WIN32)
+    REXLOG_INFO("Graphics API: {}", svr::GraphicsApiDescription());
+#endif
     frame_dumper_.Start(runtime()->graphics_system());
+    if (REXCVAR_GET(svr_high_priority))
+      SvrSetHighPriority(true);
     // Add-on packages in <exe>/dlc are installed once (dlc_install.h).
     svr::InstallDlcPackages(runtime()->kernel_state(), rex::filesystem::GetExecutableFolder() / "dlc",
                            runtime()->user_data_root());
@@ -239,6 +268,18 @@ class Svr2010App : public rex::ReXApp {
       t_overlay_reads_pad = false;
       return any;
     };
+    hooks.set_high_priority = [](bool on) { SvrSetHighPriority(on); };
+#if defined(SVR_NATIVE_RENDERER)
+    hooks.auto_resolution = [] {
+      static constexpr const char* kNames[] = {"720p", "720p", "1440p", "4K", "2880p"};
+      return std::string(kNames[std::min(bd::gpu::SvrAutoRenderScale(), 4u)]);
+    };
+#endif
+#if defined(_WIN32)
+    hooks.auto_graphics_api = [] {
+      return std::string(svr::WantsVulkan("auto") ? "Vulkan" : "Direct3D 12");
+    };
+#endif
     hooks.updater = [this] { return updater_.get(); };
     hooks.quit = [this] { app_context().QuitFromUIThread(); };
     settings_menu_ = std::make_unique<SettingsMenuDialog>(

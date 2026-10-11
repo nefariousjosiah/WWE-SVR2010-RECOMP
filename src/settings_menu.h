@@ -45,6 +45,10 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
     // Every controller the game sees (SDL: PlayStation, Switch, Xbox...), in XInput button bits,
     // read even while the game's own input is off. XInput alone only sees Xbox-style pads.
     std::function<bool(uint16_t& buttons, int16_t& lx, int16_t& ly)> read_pad;
+    std::function<void(bool)> set_high_priority;  // above-normal process priority
+    // What the Auto choices pick on this PC ("1440p", "Direct3D 12"), shown as "Auto (1440p)".
+    std::function<std::string()> auto_resolution;
+    std::function<std::string()> auto_graphics_api;
   };
 
   SettingsMenuDialog(rex::ui::ImGuiDrawer* drawer, std::string title, std::filesystem::path toml,
@@ -101,12 +105,14 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
  private:
   enum RowId {
     kResolution,
+    kGraphicsApi,
     kDisplay,
     kFrameRate,
     kShape,
     kCounter,
     kSound,
     kKeyboard,
+    kPriority,
     kCheckUpdates,
     kUpdate,
     kClose,
@@ -127,8 +133,12 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
     static const std::vector<Row> rows = {
         {"Resolution", {"Auto (recommended)", "720p (original)", "1440p", "4K"},
          "The game renders at this resolution and scales it to your screen: higher is smoother and "
-         "sharper. Auto picks 1440p on 1080p/1440p screens, 4K on 4K screens, 720p on Steam Deck. "
+         "sharper. Auto picks 1440p on 1080p/1440p screens, 4K on 4K screens, 720p on Steam Deck and "
+         "laptops' built-in graphics. "
          "Applies the next time you start the game."},
+        {"Graphics API", {"Auto (recommended)", "Direct3D 12", "Vulkan"},
+         "Auto draws with Direct3D 12 on Windows and Vulkan on Steam Deck / Linux. If the game "
+         "looks wrong or runs badly, try the other one. Applies the next time you start the game."},
         {"Display", {"Fullscreen", "Window"}, "Switch between fullscreen and a window."},
         {"Frame rate", {"60 fps", "30 fps (original)"},
          "60 fps uses the game's own 60 fps mode, so everything plays at the right speed. Takes "
@@ -141,6 +151,9 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
         {"Keyboard controls", {"On", "Off"},
          "The keyboard works as a controller (rebind keys with F4). Not tested yet: a controller is "
          "recommended."},
+        {"CPU priority", {"Normal", "High (busy or weak PCs)"},
+         "High lets the game go first when other programs (browser, recording, downloads) want "
+         "the processor too: fewer frame drops on busy or weak PCs. Those programs get less."},
         {"Check for updates", {"At startup", "Off"},
          "At startup the game asks GitHub whether a newer version of this port is out. Nothing is "
          "downloaded unless you choose Update."},
@@ -154,12 +167,16 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
     open_ = true;
     selected_ = 0;
     values_[kResolution] = std::clamp(std::atoi(Get("svr_render_scale").c_str()), 0, 3);
+    std::string api = Get("svr_graphics_api");
+    std::erase(api, '"');
+    values_[kGraphicsApi] = api == "d3d12" ? 1 : api == "vulkan" ? 2 : 0;
     values_[kDisplay] = hooks_.is_fullscreen && hooks_.is_fullscreen() ? 0 : 1;
     values_[kFrameRate] = Get("svr_60fps") == "true" ? 0 : 1;
     values_[kShape] = Get("bd_aspect_ratio") == "6" ? 1 : 0;
     values_[kCounter] = hooks_.fps_counter_on && hooks_.fps_counter_on() ? 0 : 1;
     values_[kSound] = Get("audio_mute") == "true" ? 1 : 0;
     values_[kKeyboard] = Get("mnk_mode") == "true" ? 0 : 1;
+    values_[kPriority] = Get("svr_high_priority") == "true" ? 1 : 0;
     values_[kCheckUpdates] = Get("svr_check_updates") == "false" ? 1 : 0;
     confirm_update_ = false;
   }
@@ -176,6 +193,13 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
       case kResolution:
         Set("svr_render_scale", std::to_string(v));
         break;
+      case kGraphicsApi: {
+        // A string setting: quoted in the toml file.
+        const std::string api = v == 1 ? "d3d12" : v == 2 ? "vulkan" : "auto";
+        rex::cvar::SetFlagByName("svr_graphics_api", api);
+        Save("svr_graphics_api", "\"" + api + "\"");
+        break;
+      }
       case kDisplay:
         if (hooks_.set_fullscreen)
           hooks_.set_fullscreen(v == 0);
@@ -197,6 +221,11 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
         break;
       case kKeyboard:
         Set("mnk_mode", v == 0 ? "true" : "false");
+        break;
+      case kPriority:
+        Set("svr_high_priority", v == 1 ? "true" : "false");
+        if (hooks_.set_high_priority)
+          hooks_.set_high_priority(v == 1);
         break;
       case kCheckUpdates:
         Set("svr_check_updates", v == 0 ? "true" : "false");
@@ -241,6 +270,18 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
       default:
         break;
     }
+  }
+
+  // A row's current choice; Auto says what it picked here ("Auto (1440p)").
+  std::string ValueText(int row) const {
+    const std::string label = Rows()[row].labels[values_[row]];
+    if (values_[row] == 0) {
+      if (row == kResolution && hooks_.auto_resolution)
+        return "Auto (" + hooks_.auto_resolution() + ")";
+      if (row == kGraphicsApi && hooks_.auto_graphics_api)
+        return "Auto (" + hooks_.auto_graphics_api() + ")";
+    }
+    return label;
   }
 
   std::string UpdateValue() const {
@@ -530,10 +571,11 @@ class SettingsMenuDialog : public rex::ui::ImGuiDialog {
                       ready ? accent : (sel ? IM_COL32(255, 255, 255, 255) : text), value.c_str());
           continue;
         }
-        const char* value = row.labels[values_[i]];
-        const float vw = ImGui::CalcTextSize(value).x;
+        const std::string value = ValueText(i);
+        const float vw = ImGui::CalcTextSize(value.c_str()).x;
         const float mid = p0.x + value_x + (inner - value_x) * 0.5f;
-        dl->AddText(ImVec2(mid - vw * 0.5f, cy - fh * 0.5f), sel ? IM_COL32(255, 255, 255, 255) : text, value);
+        dl->AddText(ImVec2(mid - vw * 0.5f, cy - fh * 0.5f), sel ? IM_COL32(255, 255, 255, 255) : text,
+                    value.c_str());
         const ImU32 arrow = sel ? accent : IM_COL32(90, 96, 112, 255);
         const float ax = 9 * s, ay = 8 * s;
         const float lx = p0.x + value_x + 10 * s, rx = p1.x - 18 * s;

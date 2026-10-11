@@ -1,10 +1,10 @@
-﻿# svr2010 - ReXGlue Recompiled Project
+# svr2010 - ReXGlue Recompiled Project
 #
 # SDK boilerplate lives in generated/rexglue.cmake.
 
 cmake_minimum_required(VERSION 3.25)
 # The release version (shown in the in-game settings menu; package_release.ps1 uses it too).
-project(svr2010 VERSION 0.5.1 LANGUAGES CXX)
+project(svr2010 VERSION 0.6 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

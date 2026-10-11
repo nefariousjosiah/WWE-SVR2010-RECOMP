@@ -36,7 +36,7 @@ bool SvrOnSteamDeck();
 REXCVAR_DEFINE_INT32(svr_render_scale, 0, "SvR",
                      "Internal resolution: 1 = 720p (original), 2 = 1440p, 3 = 4K (2160p), "
                      "4 = 2880p. 0 = auto: from the display (1440p on 1080p/1440p screens, 4K on "
-                     "4K screens), 720p on Steam Deck");
+                     "4K screens), 720p on Steam Deck and on built-in (laptop) graphics");
 
 namespace bd::gpu {
 
@@ -99,13 +99,23 @@ bool TargetCurrent(u32 texture_va, std::unordered_map<u32, HostTarget>::iterator
 
 }  // namespace
 
-u32 SvrRenderScale() {
-  static std::atomic<u32> s_scale{0};
-  if (const u32 scale = s_scale.load(std::memory_order_relaxed))
+// Built-in graphics (Intel UHD / Iris Xe, the Radeon in Ryzen laptops) share the CPU's memory,
+// power and heat: rendering above 720p there costs the steady 60.
+bool OnBuiltInGraphics() {
+  auto *device = Video::HostDevice();
+  return device && (device->getDescription().type == plume::RenderDeviceType::INTEGRATED ||
+                    device->getCapabilities().uma);
+}
+
+u32 SvrAutoRenderScale() {
+  static std::atomic<u32> s_auto{0};
+  if (const u32 scale = s_auto.load(std::memory_order_relaxed))
     return scale;
+  if (!Video::HostDevice())
+    return 1;  // not decided before the graphics device exists
   u32 scale = 1;
-  if (const int configured = REXCVAR_GET(svr_render_scale); configured > 0) {
-    scale = u32(std::min(configured, 4));
+  if (OnBuiltInGraphics()) {
+    BD_INFO("SvR native: built-in graphics, auto resolution is 720p");
   } else if (!SvrOnSteamDeck()) {
     // The larger of the window and the display, so a window on a big screen still renders
     // sharp (downscaled at present); 720p multiples rounded to nearest: 1080/1440 -> 2, 2160 -> 3.
@@ -118,6 +128,16 @@ u32 SvrRenderScale() {
     if (h)
       scale = std::clamp(u32((h + 360u) / 720u), 1u, 4u);
   }
+  s_auto.store(scale, std::memory_order_relaxed);
+  return scale;
+}
+
+u32 SvrRenderScale() {
+  static std::atomic<u32> s_scale{0};
+  if (const u32 scale = s_scale.load(std::memory_order_relaxed))
+    return scale;
+  const int configured = REXCVAR_GET(svr_render_scale);
+  const u32 scale = configured > 0 ? u32(std::min(configured, 4)) : SvrAutoRenderScale();
   u32 expected = 0;
   if (s_scale.compare_exchange_strong(expected, scale)) {
     BD_INFO("SvR native: internal resolution {}x{} ({}x)", 1280 * scale, 720 * scale, scale);
