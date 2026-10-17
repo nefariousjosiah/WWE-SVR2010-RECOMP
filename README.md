@@ -62,8 +62,8 @@ loading.
   smeared hair, tattoos, ropes and the crowd) is off; the higher internal resolution smooths edges
   instead. `svr_edge_blur = true` in `svr2010.toml` brings the original look back.
 - **In-game settings menu:** F1, or Back + Start on a controller (Share + Options on PlayStation): resolution, graphics API,
-  fullscreen or window, 60 or 30 fps, screen shape, FPS counter, sound, keyboard controls and CPU
-  priority. Saved for next time.
+  fullscreen or window, 60 or 30 fps, screen shape, FPS counter, sound, keyboard controls, how
+  controllers map to players and CPU priority. Saved for next time.
 - **Updates in the game, when you want them:** a new version is announced at startup and installed
   from the settings menu only if you choose to. Your saves are kept and backed up first (see
   [Updating](#updating)).
@@ -102,8 +102,8 @@ Good to know:
 
 - **Settings:** press **F1** in game (or **Back + Start** on a controller, **Share + Options** on PlayStation) for the settings menu:
   resolution (Auto, 720p, 1440p, 4K), graphics API (Auto, Direct3D 12, Vulkan), fullscreen or
-  window, 60 or 30 fps, screen shape, FPS counter, sound, keyboard controls and CPU priority. They
-  are saved in `svr2010.toml`.
+  window, 60 or 30 fps, screen shape, FPS counter, sound, keyboard controls, **Controllers**
+  (separate players, or every controller on player 1) and CPU priority. They are saved in `svr2010.toml`.
 - **"Windows protected your PC"**: the program isn't code-signed. Click *More info* and then
   *Run anyway*.
 - **Quitting:** close the game window (Alt+F4 or the close button).
@@ -115,7 +115,11 @@ Good to know:
 
 ### Controls
 
-**A controller is recommended**; plug it in before starting. Keyboard controls are currently not
+**A controller is recommended**; plug it in before starting. Each controller is its own player
+(player 1, player 2...). Playing alone and the game says player 2 is disconnected, or your
+controller stops responding? A controller that reconnects, or shows up twice through Steam Input /
+DS4Windows / DSX, can become player 2: set **Controllers** to **All on player 1** in the settings
+menu. Keyboard controls are currently not
 tested yet. Their default layout (rebind with **F4** in game):
 
 | Controller | Keyboard | | Controller | Keyboard |

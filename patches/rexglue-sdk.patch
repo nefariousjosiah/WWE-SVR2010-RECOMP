@@ -851,10 +851,18 @@ index 001f36b..3170efa 100644
    // Write.
    if (write_descriptor_set_count) {
 diff --git a/src/input/input_system.cpp b/src/input/input_system.cpp
-index 813bb1c..1d67510 100644
+index 813bb1c..173ee69 100644
 --- a/src/input/input_system.cpp
 +++ b/src/input/input_system.cpp
-@@ -79,6 +79,7 @@ void InputSystem::SetDeviceAssignment(std::unique_ptr<DeviceAssignment> assignme
+@@ -72,6 +72,7 @@ void InputSystem::SetActiveCallback(std::function<bool()> callback) {
+ }
+ 
+ void InputSystem::SetDeviceAssignment(std::unique_ptr<DeviceAssignment> assignment) {
++  std::lock_guard lock(mutex_);
+   assignment_ = std::move(assignment);
+   if (assignment_) {
+     assignment_->OnDevicesChanged(devices_);
+@@ -79,6 +80,7 @@ void InputSystem::SetDeviceAssignment(std::unique_ptr<DeviceAssignment> assignme
  }
  
  void InputSystem::RefreshDevices() {
@@ -862,7 +870,7 @@ index 813bb1c..1d67510 100644
    std::vector<DeviceInfo> seen;
    std::vector<InputDriver*> owners;
    std::vector<DeviceInfo> enumerated;
-@@ -187,6 +188,7 @@ const DeviceInfo* InputSystem::DeviceInfoFor(DeviceId id) const {
+@@ -187,6 +189,7 @@ const DeviceInfo* InputSystem::DeviceInfoFor(DeviceId id) const {
  X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
                                        X_INPUT_CAPABILITIES* out_caps) {
    SCOPE_profile_cpu_f("hid");
@@ -870,7 +878,7 @@ index 813bb1c..1d67510 100644
    if (!out_caps || !assignment_) {
      return X_ERROR_DEVICE_NOT_CONNECTED;
    }
-@@ -214,6 +216,7 @@ X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
+@@ -214,6 +217,7 @@ X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
  
  X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
    SCOPE_profile_cpu_f("hid");
@@ -878,7 +886,7 @@ index 813bb1c..1d67510 100644
    if (!assignment_) {
      return X_ERROR_DEVICE_NOT_CONNECTED;
    }
-@@ -253,6 +256,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
+@@ -253,6 +257,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
  
  X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration) {
    SCOPE_profile_cpu_f("hid");
@@ -886,7 +894,7 @@ index 813bb1c..1d67510 100644
    if (!assignment_) {
      return X_ERROR_DEVICE_NOT_CONNECTED;
    }
-@@ -295,6 +299,7 @@ X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration
+@@ -295,6 +300,7 @@ X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration
  X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
                                     X_INPUT_KEYSTROKE* out_keystroke) {
    SCOPE_profile_cpu_f("hid");
