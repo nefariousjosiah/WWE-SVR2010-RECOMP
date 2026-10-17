@@ -420,4 +420,53 @@ void Video::ResolveRtToTexture(GuestTexture *dst) {
   }
 }
 
+bool Video::ReadBackTexture(GuestTexture *tex, std::vector<u8> &out, u32 &width,
+                            u32 &height, u32 &row_bytes) {
+  BD_CPU_ZONE("ReadBackTexture");
+  if (!tex || !tex->texture || tex->format != plume::RenderFormat::R8G8B8A8_UNORM ||
+      tex->sampleCount != plume::RenderSampleCount::COUNT_1 || !tex->width ||
+      !tex->height)
+    return false;
+  auto &s = state();
+  std::lock_guard lock(s.mutex);
+  if (!s.ready)
+    return false;
+  // A resolve kept as an alias of its render target has no content of its own yet.
+  MaterializeInboundLocked(s, tex);
+  width = tex->width;
+  height = tex->height;
+  row_bytes = (width * 4u + 255u) & ~255u;
+  auto buffer = CreateHostBuffer(
+      s.device.get(), plume::RenderBufferDesc::ReadbackBuffer(u64(row_bytes) * height),
+      "texture-readback");
+  if (!buffer)
+    return false;
+  BeginCommandList(s);
+  if (!s.command_list_open)
+    return false;
+  s.draw_framebuffer_bound = false;
+  plume::RenderTextureBarrier pre(tex->texture, plume::RenderTextureLayout::COPY_SOURCE);
+  s.command_list->barriers(plume::RenderBarrierStage::COPY, &pre, 1);
+  s.command_list->copyTextureRegion(
+      plume::RenderTextureCopyLocation::PlacedFootprint(buffer.get(), tex->format, width,
+                                                        height, 1, row_bytes / 4u, 0),
+      plume::RenderTextureCopyLocation::Subresource(tex->texture, 0, 0));
+  plume::RenderTextureBarrier post(tex->texture, plume::RenderTextureLayout::SHADER_READ);
+  s.command_list->barriers(plume::RenderBarrierStage::GRAPHICS, &post, 1);
+  tex->layout = plume::RenderTextureLayout::SHADER_READ;
+  // Submit what this frame recorded so far and wait for it; the frame goes on in a new list
+  // on the same slot (its allocator is free again once the GPU is done).
+  const u32 cur = s.frame.load(std::memory_order_relaxed);
+  SubmitOpenListLocked(s);
+  s.queue->waitForCommandFence(s.fences[cur].get());
+  s.command_list_submitted[cur] = false;
+  const void *mapped = buffer->map();
+  if (!mapped)
+    return false;
+  const auto *bytes = static_cast<const u8 *>(mapped);
+  out.assign(bytes, bytes + size_t(row_bytes) * height);
+  buffer->unmap();
+  return true;
+}
+
 } // namespace bd::gpu
