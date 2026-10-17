@@ -111,6 +111,31 @@ bool CopySurfaceToTextureLocked(VideoState &s, GuestTexture *src,
     } else {
       s.command_list->copyTexture(dst->texture, src->texture);
     }
+#if defined(SVR_NATIVE_RENDERER)
+  } else if (format_match && !needs_scale && !dst_is_cube &&
+             src->sampleCount == plume::RenderSampleCount::COUNT_1 &&
+             src->width >= dst->width && src->height >= dst->height) {
+    // A Xenos resolve doesn't scale: into a smaller texture it copies the texture's size from the
+    // render target's top-left corner. SvR draws each smaller copy of an edited outfit there and
+    // resolves it so; shrinking the whole target instead put the full outfit into every smaller
+    // copy, and the outfit changed colours at a distance.
+    plume::RenderTextureBarrier pre[2] = {
+        plume::RenderTextureBarrier(src->texture,
+                                    plume::RenderTextureLayout::COPY_SOURCE),
+        plume::RenderTextureBarrier(dst->texture,
+                                    plume::RenderTextureLayout::COPY_DEST),
+    };
+    s.command_list->barriers(plume::RenderBarrierStage::COPY, pre,
+                             std::size(pre));
+    src->layout = plume::RenderTextureLayout::COPY_SOURCE;
+    dst->layout = plume::RenderTextureLayout::COPY_DEST;
+    const plume::RenderBox box(0, 0, static_cast<int32_t>(dst->width),
+                               static_cast<int32_t>(dst->height));
+    s.command_list->copyTextureRegion(
+        plume::RenderTextureCopyLocation::Subresource(dst->texture, 0, 0),
+        plume::RenderTextureCopyLocation::Subresource(src->texture, 0, 0), 0,
+        0, 0, &box);
+#endif
   } else if (dst_is_cube) {
     static std::atomic<u32> s_warn{0};
     if (s_warn.fetch_add(1, std::memory_order_relaxed) < 8) {
