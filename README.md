@@ -19,16 +19,22 @@ loading.
 > game, **F1** (or **Back + Start** on a controller, **View + Menu** on the Steam Deck) opens the
 > settings menu.
 
-> **Work in progress.** This port gets regular updates, and bugs are fixed as they're found and
-> reported, so don't expect a finished port yet. If you run into a problem, please
+> **Version 1.0, still updated.** The port gets regular updates, and bugs are fixed as they're
+> found and reported. If you run into a problem, please
 > [open an issue](https://github.com/nefariousjosiah/WWE-SVR2010-RECOMP/issues) with your graphics
 > card, `game.log` from the game's folder and a screenshot.
 
-![The in-game settings menu (F1, or Back + Start on a controller)](docs/settings-menu.png)
+<p align="center">
+  <img src="docs/settings-menu.png" width="520" alt="The in-game settings menu (F1, or Back + Start on a controller)">
+</p>
 
 ## Showcase
 
 <p align="center">
+  <img src="docs/showcase/stone-cold.gif" width="480" alt="Stone Cold Steve Austin's Royal Rumble entrance">
+  <img src="docs/showcase/wrestlemania.gif" width="480" alt="The WrestleMania 25 stage and pyro">
+  <img src="docs/showcase/flying-elbow.gif" width="480" alt="Shawn Michaels' flying elbow off the top rope onto Kane">
+  <img src="docs/showcase/sweet-chin-music.gif" width="480" alt="Shawn Michaels hits Sweet Chin Music on Kane">
   <img src="docs/showcase/entrance.gif" width="480" alt="Randy Orton's champion entrance">
   <img src="docs/showcase/gts.gif" width="480" alt="CM Punk hits the GO2SLEEP on Randy Orton">
   <img src="docs/showcase/backbreaker.gif" width="480" alt="Randy Orton lifts CM Punk in the corner">
@@ -65,6 +71,9 @@ loading.
   fullscreen or window, 60 or 30 fps, screen shape, FPS counter, sound, **language** (English,
   Spanish, French, German or Italian), keyboard controls, how controllers map to players and CPU
   priority. Saved for next time.
+- **Play in your language:** English, Español, Français, Deutsch or Italiano, the languages on
+  the disc. Pick one under **Language** in the settings menu and press A twice to restart
+  straight into it. (The commentary is English only, as on the disc.)
 - **Updates in the game, when you want them:** a new version is announced at startup and installed
   from the settings menu only if you choose to. Your saves are kept and backed up first (see
   [Updating](#updating)).
@@ -279,7 +288,11 @@ Notes for the Deck:
 
 ## Known issues
 
-None open right now. If you run into something, please
+- **Road to WrestleMania with a created superstar** can crash after the backstage brawl (the
+  second match), so that story can't be finished yet
+  ([#10](https://github.com/nefariousjosiah/WWE-SVR2010-RECOMP/issues/10)). Being looked into.
+
+If you run into something else, please
 [open an issue](https://github.com/nefariousjosiah/WWE-SVR2010-RECOMP/issues) with `game.log` from
 the game's folder.
 
@@ -342,9 +355,10 @@ sources, `tools/` build scripts, `docs/` the images on this page.
 - [re:Blue](https://github.com/zolaware/reblue) (Blue Dragon), the renderer this one is adapted
   from, with [plume](https://github.com/zolaware/plume) and
   [XenosRecomp](https://github.com/zolaware/reblue-XenosRecomp).
-- The settings menu: [Dear ImGui](https://github.com/ocornut/imgui) and the Roboto font;
+- The settings menu: [Dear ImGui](https://github.com/ocornut/imgui), with the Press Start 2P and
+  Roboto fonts;
   [SDL](https://libsdl.org) for controllers and sound.
-- [zstd](https://github.com/facebook/zstd); the Press Start 2P font.
+- [zstd](https://github.com/facebook/zstd).
 - Inside the runtime: [FFmpeg](https://ffmpeg.org) (audio),
   [libmspack](https://github.com/kyz/libmspack) and the other libraries the ReXGlue SDK uses.
 
