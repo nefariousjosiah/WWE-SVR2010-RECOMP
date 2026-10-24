@@ -43,6 +43,15 @@ name = "SvrCameraAspectHook"
 address = 0x821E11A8
 registers = ["f1", "f2"]
 
+# Render command 24 (src/crash_guards.cpp, issue #13): sub_821E1FA0 about to call the command's
+# object (vtable slot 6, in r8). An object destroyed before its command ran has _purecall there,
+# which aborts the game: the call is skipped (jump past the bctrl) when the hook returns true.
+[[midasm_hook]]
+name = "SvrDeadObjectCallHook"
+address = 0x821E2160
+registers = ["r8"]
+jump_address_on_true = 0x821E2164
+
 [functions]
 # Branch targets analysis left outside any function (codegen UnresolvedCall).
 0x828C6080 = {}
