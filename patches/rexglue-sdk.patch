@@ -2451,3 +2451,106 @@ index b94fe9e..7199826 100644
      immediate_drawer_ = OnCreateImmediateDrawer();
      if (immediate_drawer_) {
        SetupOverlays(/*presenter=*/nullptr, immediate_drawer_.get());
+diff --git a/src/kernel/xboxkrnl/xboxkrnl_debug.cpp b/src/kernel/xboxkrnl/xboxkrnl_debug.cpp
+index 670c446..45853e8 100644
+--- a/src/kernel/xboxkrnl/xboxkrnl_debug.cpp
++++ b/src/kernel/xboxkrnl/xboxkrnl_debug.cpp
+@@ -22,11 +22,55 @@
+ #include <rex/system/xthread.h>
+ #include <rex/system/xtypes.h>
+ 
++#include <atomic>
++#include <cstdio>
++#include <string>
++
+ namespace rex::kernel::xboxkrnl {
+ using namespace rex::system;
+ 
++namespace {
++// What stopped the game (one of the breaks below; with no debugger attached the break ends the
++// process), with the guest code that got there: the link register, then the return addresses up
++// the stack (each frame's back chain at 0(r1), its caller's saved LR 8 bytes below that), within
++// the thread's stack (its PCR's stack base is the top). Logged as an error and flushed.
++void LogGuestBreak(const std::string& what) {
++  std::string trail;
++  auto* thread = XThread::GetCurrentThread();
++  auto* ctx = thread && thread->thread_state() ? thread->thread_state()->context() : nullptr;
++  if (ctx) {
++    char buf[32];
++    std::snprintf(buf, sizeof(buf), " lr %08X | stack", static_cast<uint32_t>(ctx->lr));
++    trail = buf;
++    auto* mem = REX_KERNEL_MEMORY();
++    const auto* pcr = mem->TranslateVirtual<const X_KPCR*>(thread->pcr_ptr());
++    const uint32_t top = pcr ? uint32_t(pcr->stack_base_ptr) : 0;
++    uint32_t sp = ctx->r1.u32;
++    for (int i = 0; i < 16 && sp && sp + 4 <= top; ++i) {
++      const uint32_t caller_sp = *mem->TranslateVirtual<const rex::be<uint32_t>*>(sp);
++      if (caller_sp <= sp || caller_sp > top)
++        break;
++      const uint32_t saved_lr = *mem->TranslateVirtual<const rex::be<uint32_t>*>(caller_sp - 8);
++      std::snprintf(buf, sizeof(buf), " %08X", saved_lr);
++      trail += buf;
++      sp = caller_sp;
++    }
++  }
++  REXKRNL_ERROR("Guest break: {}{}", what, trail);
++  rex::FlushLogging();
++}
++}  // namespace
++
+ void DbgBreakPoint_entry() {
+-  rex::debug::Break();
++  // With no debugger attached there is nothing to break into, and the break would end the game: it
++  // carries on instead, as a retail console does. (SvR 2010's job wait, sub_8220FDF8, calls it when
++  // a job it waited for hasn't set its done flag yet: Road to WrestleMania with a created superstar
++  // crashed there, issue #13.)
++  static std::atomic<uint32_t> s_count{0};
++  if (s_count.fetch_add(1, std::memory_order_relaxed) < 16)
++    LogGuestBreak("DbgBreakPoint (no debugger attached: carrying on)");
++  if (rex::debug::IsDebuggerAttached())
++    rex::debug::Break();
+ }
+ 
+ // https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx
+@@ -123,6 +167,18 @@ void HandleCppException(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
+   auto catchable_types = REX_KERNEL_MEMORY()->TranslateVirtual<x_s__CatchableTypeArray*>(
+       throw_info->catchable_type_array_ptr);
+ 
++  // The thrown type's name: its TypeDescriptor (vftable, spare, then the decorated name).
++  std::string type = "?";
++  if (catchable_types->number_catchable_types > 0) {
++    auto* catchable = REX_KERNEL_MEMORY()->TranslateVirtual<x_s__CatchableType*>(
++        catchable_types->catchable_type_ptrs[0]);
++    if (catchable->type_ptr)
++      type = REX_KERNEL_MEMORY()->TranslateVirtual<const char*>(catchable->type_ptr + 8);
++  }
++  char buf[96];
++  std::snprintf(buf, sizeof(buf), " (object %08X, vftable %08X)", uint32_t(thrown_ptr),
++                uint32_t(vftable_ptr));
++  LogGuestBreak("C++ exception " + type + buf);
+   rex::debug::Break();
+ }
+ 
+@@ -140,6 +196,11 @@ void RtlRaiseException_entry(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
+ 
+   // TODO(benvanik): unwinding.
+   // This is going to suck.
++  char buf[96];
++  std::snprintf(buf, sizeof(buf), "RtlRaiseException 0x%08X flags %08X address %08X",
++                uint32_t(record->code), uint32_t(record->exception_flags),
++                uint32_t(record->exception_address));
++  LogGuestBreak(buf);
+   rex::debug::Break();
+ }
+ 
+@@ -147,6 +208,10 @@ void KeBugCheckEx_entry(u32 code, u32 param1, u32 param2, u32 param3, u32 param4
+   REXKRNL_DEBUG("*** STOP: 0x{:08X} (0x{:08X}, 0x{:08X}, 0x{:08X}, 0x{:08X})", code, param1, param2,
+                 param3, param4);
+   fflush(stdout);
++  char buf[96];
++  std::snprintf(buf, sizeof(buf), "KeBugCheckEx 0x%08X (%08X, %08X, %08X, %08X)", uint32_t(code),
++                uint32_t(param1), uint32_t(param2), uint32_t(param3), uint32_t(param4));
++  LogGuestBreak(buf);
+   rex::debug::Break();
+   assert_always();
+ }

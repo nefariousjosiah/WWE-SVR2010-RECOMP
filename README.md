@@ -179,9 +179,7 @@ SVR2010-NATIVE\
 
 ## Known issues
 
-- **Road to WrestleMania with a created superstar** can crash after the backstage brawl (the second
-  match), so that story can't be finished yet
-  ([#10](https://github.com/nefariousjosiah/WWE-SVR2010-RECOMP/issues/10)). Being looked into.
+- None right now. Found one? Open an [issue](https://github.com/nefariousjosiah/WWE-SVR2010-RECOMP/issues).
 
 ## Troubleshooting
 
