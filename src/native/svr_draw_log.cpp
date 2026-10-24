@@ -36,8 +36,8 @@ u64 TargetFrame() {
   return frame;
 }
 
-// SetTexture (sub_82255270) keeps the bound D3D texture per slot at device + (slot + 3178) * 4.
-constexpr u32 kBoundTextureTable = 3178u * 4u;  // SvR 2009: 3134
+// SetTexture (sub_826DD150) keeps the bound D3D texture per slot at device + (slot + 3180) * 4.
+constexpr u32 kBoundTextureTable = 3180u * 4u;  // SvR 2009: 3136, 2008: 3134
 
 std::string Host(const GuestTexture *t) {
   if (!t)
