@@ -52,6 +52,34 @@ address = 0x821E2160
 registers = ["r8"]
 jump_address_on_true = 0x821E2164
 
+# Unlock everything (src/unlock_all.cpp): the check of item N (sub_8216AD80) has just read the item's
+# byte into r3 (r31 = the item).
+[[midasm_hook]]
+name = "SvrUnlockAllHook"
+address = 0x8216AE4C
+registers = ["r3", "r31"]
+after_instruction = true
+
+# The checks for one kind of thing: true jumps to where they answer "available". sub_8216AEE8, the
+# superstars, past its check for downloaded ones (r31 = the superstar).
+[[midasm_hook]]
+name = "SvrUnlockAllSuperstarHook"
+address = 0x8216AF4C
+registers = ["r31"]
+jump_address_on_true = 0x8216B128
+
+# sub_8216B228
+[[midasm_hook]]
+name = "SvrUnlockAllOn"
+address = 0x8216B238
+jump_address_on_true = 0x8216B260
+
+# sub_8216B278
+[[midasm_hook]]
+name = "SvrUnlockAllOn"
+address = 0x8216B2AC
+jump_address_on_true = 0x8216B338
+
 [functions]
 # Branch targets analysis left outside any function (codegen UnresolvedCall).
 0x828C6080 = {}
