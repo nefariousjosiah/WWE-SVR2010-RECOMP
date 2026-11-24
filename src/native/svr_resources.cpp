@@ -304,6 +304,12 @@ GuestTexture *SvrResolveTarget(u32 texture_va) {
 // outfit came out as rainbow stripes). The result is read back into guest memory, which stalls
 // for the GPU; a texture resolved every frame (shadows, the screen) is skipped once seen in
 // several frames running, so the wait happens while loading, not during play.
+//
+// A copy of the whole screen (1280x720) is skipped too: those are the game's screen effects, such as
+// the motion blur of a signature move or a turnbuckle dive, which only the GPU reads. They are
+// copied at the internal resolution, so at 8K each one stalled for about 150 ms and the game froze
+// for half a second as the effect began (GitHub issue #17). What the CPU does read is another size:
+// the outfit atlas (2048x1024) and the superstar photo (736x1280).
 void SvrWriteBackResolve(u32 texture_va, GuestTexture *dst) {
   struct Seen {
     u32 desc = 0;
@@ -317,6 +323,8 @@ void SvrWriteBackResolve(u32 texture_va, GuestTexture *dst) {
   if (!dst || !ReadFetch(texture_va, fetch) ||
       (fetch.format != rex::graphics::xenos::TextureFormat::k_8_8_8_8 &&
        fetch.format != rex::graphics::xenos::TextureFormat::k_8_8_8_8_A))
+    return;
+  if (fetch.size_2d.width + 1 == 1280 && fetch.size_2d.height + 1 == 720)
     return;
   const u64 frame = SvrFrameIndex();
   Seen &s = seen[texture_va];
